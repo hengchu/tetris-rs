@@ -1,2 +1,8 @@
 # tetris-rs
-A tetris game in Rust
+Play tetris in your console!
+
+Controls:
+- Left: 'A'
+- Right: 'D'
+- Counterclockwise rotation: 'Q'
+- Clockwise rotation: 'R'
