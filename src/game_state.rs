@@ -260,7 +260,7 @@ impl Tetris {
 
     /// Shift everything above row down by 1.
     fn shift_down(&mut self, row: i32) {
-        for r in (1..row as usize).rev() {
+        for r in (1..=row as usize).rev() {
             for c in 0..NCOLS {
                 self.grid[r][c] = self.grid[r - 1][c];
             }
