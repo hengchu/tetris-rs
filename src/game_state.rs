@@ -32,7 +32,7 @@ lazy_static! {
                     [[(0, 0), (1, 0), (2, 0), (2, 1)],
                      [(1, 0), (1, 1), (1, 2), (2, 0)],
                      [(0, 0), (0, 1), (1, 1), (2, 1)],
-                     [(2, 0), (2, 1), (2, 2), (1, 1)]]);
+                     [(2, 0), (2, 1), (2, 2), (1, 2)]]);
 
         //  #       ##
         //  #  #    #   ###
@@ -95,6 +95,14 @@ pub enum Piece {
     I,
 }
 
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum Event {
+    Left = 0,
+    Right,
+    CounterClock,
+    Clock,
+}
+
 impl TryFrom<i32> for Piece {
     type Error = ();
 
@@ -112,9 +120,9 @@ impl TryFrom<i32> for Piece {
     }
 }
 
-const NCOLS: usize = 10;
-const NROWS: usize = 20;
-type Grid = [[i32; NCOLS]; NROWS];
+pub const NCOLS: usize = 10;
+pub const NROWS: usize = 20;
+pub type Grid = [[i32; NCOLS]; NROWS];
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Tetris {
@@ -186,6 +194,11 @@ impl Tetris {
         }
     }
 
+    /// Fetch the current grid state
+    pub fn grid(&self) -> &Grid {
+        &self.grid
+    }
+
     /// Fetch all positions of the current falling piece.
     fn falling_piece_positions(&self) -> Vec<(i32, i32)> {
         // TODO: a length-4 slice is fine, and we avoid allocation.
@@ -211,26 +224,38 @@ impl Tetris {
         true
     }
 
-    /// Tests whether current falling piece can drop one more unit or
-    /// not.
-    fn can_drop(&self) -> bool {
+    /// Check if the current falling piece fits into the new position
+    /// and the given rotation.
+    fn falling_fits(&self, row: i32, col: i32, rotation: i32) -> bool {
         let positions = self.falling_piece_positions();
-        for (row, col) in positions.iter() {
-            let next_row = row + 1;
-            if next_row == NROWS as i32 {
+
+        let rotation_offsets: &[Offsets4; 4] = &ROTATION_OFFSETS.get(&self.piece).unwrap();
+        let offsets: &Offsets4 = &rotation_offsets[rotation as usize];
+        for (off_row, off_col) in offsets {
+            let new_row = row + off_row;
+            let new_col = col + off_col;
+
+            if new_row < 0 || new_row >= NROWS as i32 {
                 return false;
             }
-            // if the cell 1 unit down is not part of the piece
-            // itself, and that the cell is filled, then we cannot
-            // drop further.
-            if !positions.contains(&(next_row, *col))
-                && self.grid[next_row as usize][*col as usize] == 1
+            if new_col < 0 || new_col >= NCOLS as i32 {
+                return false;
+            }
+
+            if !positions.contains(&(new_row, new_col))
+                && self.grid[new_row as usize][new_col as usize] > 0
             {
                 return false;
             }
         }
 
         true
+    }
+
+    /// Tests whether current falling piece can drop one more unit or
+    /// not.
+    fn can_drop(&self) -> bool {
+        self.falling_fits(self.anchor_row + 1, self.anchor_col, self.rotation)
     }
 
     /// Shift everything above row down by 1.
@@ -312,7 +337,114 @@ impl Tetris {
         should_continue
     }
 
-    pub fn event() {}
+    pub fn move_left(&mut self) {
+        if self.falling_fits(self.anchor_row, self.anchor_col - 1, self.rotation) {
+            // clear current piece.
+            update(
+                &mut self.grid,
+                self.piece,
+                self.rotation,
+                self.anchor_row,
+                self.anchor_col,
+                false,
+            );
+            self.anchor_col -= 1;
+            // re-paint current piece.
+            update(
+                &mut self.grid,
+                self.piece,
+                self.rotation,
+                self.anchor_row,
+                self.anchor_col,
+                true,
+            );
+        }
+    }
+
+    pub fn move_right(&mut self) {
+        if self.falling_fits(self.anchor_row, self.anchor_col + 1, self.rotation) {
+            // clear current piece.
+            update(
+                &mut self.grid,
+                self.piece,
+                self.rotation,
+                self.anchor_row,
+                self.anchor_col,
+                false,
+            );
+            self.anchor_col += 1;
+            // re-paint current piece.
+            update(
+                &mut self.grid,
+                self.piece,
+                self.rotation,
+                self.anchor_row,
+                self.anchor_col,
+                true,
+            );
+        }
+    }
+
+    pub fn counter_clock_rotate(&mut self) {
+        let new_rotation = (self.rotation + 3) % 4;
+
+        if self.falling_fits(self.anchor_row, self.anchor_col, new_rotation) {
+            // clear current piece.
+            update(
+                &mut self.grid,
+                self.piece,
+                self.rotation,
+                self.anchor_row,
+                self.anchor_col,
+                false,
+            );
+            self.rotation = new_rotation;
+            // re-paint current piece.
+            update(
+                &mut self.grid,
+                self.piece,
+                self.rotation,
+                self.anchor_row,
+                self.anchor_col,
+                true,
+            );
+        }
+    }
+
+    pub fn clock_rotate(&mut self) {
+        let new_rotation = (self.rotation + 1) % 4;
+
+        if self.falling_fits(self.anchor_row, self.anchor_col, new_rotation) {
+            // clear current piece.
+            update(
+                &mut self.grid,
+                self.piece,
+                self.rotation,
+                self.anchor_row,
+                self.anchor_col,
+                false,
+            );
+            self.rotation = new_rotation;
+            // re-paint current piece.
+            update(
+                &mut self.grid,
+                self.piece,
+                self.rotation,
+                self.anchor_row,
+                self.anchor_col,
+                true,
+            );
+        }
+    }
+
+    pub fn event(&mut self, evt: Event) {
+        match evt {
+            Event::Left => self.move_left(),
+            Event::Right => self.move_right(),
+            Event::CounterClock => self.counter_clock_rotate(),
+            Event::Clock => self.clock_rotate(),
+        }
+    }
 }
 
 #[cfg(test)]
