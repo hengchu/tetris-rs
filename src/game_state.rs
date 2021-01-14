@@ -385,7 +385,7 @@ Piece: O, Rotation: 0, ARow: 1, ACol: 4
     fn test_tick_until_bottom() {
         let mut t = Tetris::new();
         for _ in 0..19 {
-            t.tick();
+            assert!(t.tick());
         }
         let repr = format!("{:?}", t);
         let expected = r#"========TETRIS========
